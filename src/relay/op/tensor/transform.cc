@@ -1600,7 +1600,6 @@ RELAY_REGISTER_OP("slice_like")
 .set_attr<FTVMCompute>("FTVMCompute", SliceLikeCompute)
 .set_attr<TOpPattern>("TOpPattern", kInjective);
 
-
 // relay.layout_transform
 Array<Tensor> LayoutTransformCompute(const Attrs& attrs,
                                      const Array<Tensor>& inputs,
