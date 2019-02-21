@@ -1228,7 +1228,11 @@ PackedFunc WrapTimeEvaluator(PackedFunc pf,
               std::max((min_repeat_ms / (duration_ms / number) + 1),
                        number * 1.618));   // 1.618 is chosen by random
         }
-
+        // Warm up four times
+        for (int i = 0; i < 4; ++i) {
+          llc_flush(llc);
+          pf.CallPacked(args, &temp);
+        }
         for (int i = 0; i < number; ++i) {
           llc_flush(llc);
           tbegin = std::chrono::high_resolution_clock::now();
