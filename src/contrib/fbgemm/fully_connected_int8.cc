@@ -44,6 +44,20 @@ TVM_REGISTER_GLOBAL("tvm.contrib.fbgemm.fully_connected_int8")
     int n = W->shape[0];
     int k = X->shape[1];
 
+   BlockingFactors params;
+   
+   if(args.size() > 9){
+	params.MCB = args[9];
+	params.NCB = args[10];
+	params.KCB = args[11];
+	params.MR = args[12];
+	params.NR = args[13];
+	params.NR_MIN = args[14];
+	params.ROW_INTERLEAVE = args[15];
+	};
+   
+
+
     std::vector<std::int32_t> row_offsets_(PackAWithRowOffset<uint8_t>::rowOffsetBufferSize());
     std::vector<std::int32_t> Y_int32_(n*m);
     std::vector<std::int32_t> column_offsets_;
@@ -51,6 +65,59 @@ TVM_REGISTER_GLOBAL("tvm.contrib.fbgemm.fully_connected_int8")
     std::vector<TensorQuantizationParams> temp_qparams;
     temp_qparams.push_back(TensorQuantizationParams{1.0, w_zero_point});
 
+    if(args.size() > 9){
+    PackBMatrix<std::int8_t, std::int32_t> packB(	
+      matrix_op_t::Transpose,	
+      k,	
+      n,
+      reinterpret_cast<const std::int8_t*>(W->data),
+      k,
+      nullptr, 
+      1,
+      &params);
+
+    PackAWithRowOffset<std::uint8_t> packA(
+      matrix_op_t::NoTranspose,
+      m,
+      k,
+      reinterpret_cast<const std::uint8_t*>(X->data),
+      k,
+      nullptr,
+      1,
+      row_offsets_.data(),
+	&params);    
+
+    ComputeColumnOffsets<std::int8_t>(
+      k,
+      n,
+      reinterpret_cast<const std::int8_t*>(W->data),
+      temp_qparams, 
+      column_offsets_);
+
+    DoNothing<> doNothingObj{};
+    ReQuantizeOutput<false> outputProcObj(
+      doNothingObj,
+      &ReQuant_multiplier,
+      y_zero_point,
+      x_zero_point,
+      &w_zero_point,
+      packA.getRowOffsetBuffer(),
+      column_offsets_.data(),
+      reinterpret_cast<const std::int32_t*>(B->data),
+      n);
+
+    fbgemmPacked(
+      packA,
+      packB,
+      reinterpret_cast<std::uint8_t*>(Y->data),
+      Y_int32_.data(),
+      n,
+      outputProcObj,
+      0,
+      threads,
+	&params); // num_threads
+
+	}else{
     PackBMatrix<std::int8_t, std::int32_t> packB(	
       matrix_op_t::Transpose,	
       k,	
@@ -98,7 +165,7 @@ TVM_REGISTER_GLOBAL("tvm.contrib.fbgemm.fully_connected_int8")
       outputProcObj,
       0,
       threads); // num_threads
-
+}
 });
 
 
