@@ -5,6 +5,7 @@ from __future__ import absolute_import
 from numbers import Number, Integral
 from .. import _api_internal
 from .base import string_types
+import ctypes
 
 # Node base class
 _CLASS_NODE_BASE = None
@@ -56,6 +57,8 @@ def convert_to_node(value):
         return _api_internal._Map(*vlist)
     elif isinstance(value, NodeGeneric):
         return value.asnode()
+    elif isinstance(value, ctypes.c_void_p):
+        return _api_internal._c_void_ptr(value, 'uint64')
     elif value is None:
         return None
     else:

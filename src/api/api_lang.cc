@@ -42,6 +42,12 @@ TVM_REGISTER_API("_str")
   *ret = ir::StringImm::make(args[0]);
 });
 
+TVM_REGISTER_API("_c_void_ptr")
+.set_body([](TVMArgs args, TVMRetValue* ret) {
+  *ret = make_const(args[1], 
+	static_cast<uint64_t>(reinterpret_cast<uint64_t>(
+                                 args[0].operator void*())));
+});
 
 TVM_REGISTER_API("_Array")
 .set_body([](TVMArgs args,  TVMRetValue* ret) {

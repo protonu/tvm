@@ -60,9 +60,10 @@ class Builder(object):
         The number of tasks submitted in parallel
         By default it will use all cpu cores
     """
-    def __init__(self, timeout=10, n_parallel=None):
+    def __init__(self, timeout=1000, n_parallel=None):
         self.timeout = timeout
-        self.n_parallel = n_parallel or multiprocessing.cpu_count()
+        #self.n_parallel = n_parallel or multiprocessing.cpu_count()
+        self.n_parallel = 1
         self.build_kwargs = {}
         self.task = None
 
@@ -107,9 +108,10 @@ class Runner(object):
         The number of tasks submitted in parallel
         By default it will use all cpu cores
     """
-    def __init__(self, timeout=5, n_parallel=None):
+    def __init__(self, timeout=1000, n_parallel=None):
         self.timeout = timeout
         self.n_parallel = n_parallel or multiprocessing.cpu_count()
+        #self.n_parallel = 1 #n_parallel or multiprocessing.cpu_count()
         self.task = None
 
     def set_task(self, task):

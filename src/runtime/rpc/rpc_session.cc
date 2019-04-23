@@ -48,6 +48,14 @@ struct RPCArgBuffer {
   }
 };
 
+void llc_flush(std::vector<char>& llc) {
+  volatile char* data = llc.data();
+  for (int i = 0; i < llc.size(); i++) {
+    data[i]++;
+  }
+}
+
+
 // Event handler for RPC events.
 class RPCSession::EventHandler : public dmlc::Stream {
  public:
@@ -1203,6 +1211,11 @@ PackedFunc WrapTimeEvaluator(PackedFunc pf,
     // skip first time call, to activate lazy compilation components.
     pf.CallPacked(args, &temp);
     DeviceAPI::Get(ctx)->StreamSync(ctx, nullptr);
+    bool flush = true;
+    std::vector<char> llc;
+    if (flush) {
+      llc.resize(128 * 1024 * 1024, 1.0);
+    }
 
     for (int i = 0; i < repeat; ++i) {
       std::chrono::time_point<
@@ -1216,20 +1229,25 @@ PackedFunc WrapTimeEvaluator(PackedFunc pf,
                        number * 1.618));   // 1.618 is chosen by random
         }
 
-        tbegin = std::chrono::high_resolution_clock::now();
         // start timing
         for (int i = 0; i < number; ++i) {
+          llc_flush(llc);
+          tbegin = std::chrono::high_resolution_clock::now();
           pf.CallPacked(args, &temp);
+          tend = std::chrono::high_resolution_clock::now();
+          duration_ms += std::chrono::duration_cast<std::chrono::duration<double> >
+        	  (tend - tbegin).count() * 1000;
         }
+
+       tbegin = std::chrono::high_resolution_clock::now();
         DeviceAPI::Get(ctx)->StreamSync(ctx, nullptr);
         tend = std::chrono::high_resolution_clock::now();
 
-        duration_ms = std::chrono::duration_cast<std::chrono::duration<double> >
+        duration_ms += std::chrono::duration_cast<std::chrono::duration<double> >
             (tend - tbegin).count() * 1000;
       } while (duration_ms < min_repeat_ms);
 
-      double speed = std::chrono::duration_cast<std::chrono::duration<double> >(
-          tend - tbegin).count() / number;
+	double speed = duration_ms / (1000*number);
       os.write(reinterpret_cast<char*>(&speed), sizeof(speed));
     }
     std::string blob = os.str();
