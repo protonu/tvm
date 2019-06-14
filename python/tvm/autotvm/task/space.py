@@ -235,7 +235,7 @@ class SplitEntity(object):
 
         Returns
         -------
-        axes : list of Axis
+       axes : list of Axis
             The transformed axes.
         """
         ret = []
@@ -663,7 +663,7 @@ class ConfigSpace(object):
         """
         return self._add_new_transform(AnnotateSpace, name, axes, policy, **kwargs)
 
-    def define_knob(self, name, candidate):
+    def define_knob(self, name, candidate, validate_func=None):
         """Define a tunable knob with a list of candidates
 
         Parameters
@@ -673,7 +673,15 @@ class ConfigSpace(object):
         candidate: list
             list of candidates
         """
-        return self._add_new_transform(OtherOptionSpace, name, [], None, candidate=candidate)
+        valid_candidate = []
+        if validate_func:
+            for cand in candidate:
+                if validate_func(cand):
+                    valid_candidate.append(cand)
+            return self._add_new_transform(OtherOptionSpace, name, [], None, candidate=valid_candidate)
+
+        else:
+            return self._add_new_transform(OtherOptionSpace, name, [], None, candidate=candidate)
 
     def add_flop(self, flop):
         """Add float operation statistics for this tuning task
