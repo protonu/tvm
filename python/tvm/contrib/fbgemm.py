@@ -131,8 +131,8 @@ def fully_connected_int8(X, X_qparams, W, W_qparams, B, Y_qparams, nthreads=1,
 
 def conv_int8(Y_shape, X, X_zero_point, W, W_zero_point,
               Y_zero_point, C_multiplier, column_offset,
-                          MB, IC, OC, IN_DIM, G, K, stride, pad, nthreads=1,
-              autotune = False, MCB = 56, NCB = 32, KCB = 256,
+              MB, IC, OC, IN_DIM, G, K, stride, pad, spatial_dim,
+	      nthreads=1, autotune = False, MCB = 56, NCB = 32, KCB = 256,
               MR = 14, NR = 32, NR_MIN = 16, ROW_INTERLEAVE = 4):
 
     if autotune:
@@ -144,7 +144,7 @@ def conv_int8(Y_shape, X, X_zero_point, W, W_zero_point,
                 Y_zero_point,
                 C_multiplier,
                 column_offset,
-                MB, IC, OC, IN_DIM, G, K, stride, pad,
+                MB, IC, OC, IN_DIM, G, K, stride, pad, spatial_dim,
                 nthreads,
                 MCB, NCB, KCB, MR, NR, NR_MIN, ROW_INTERLEAVE),
                 name="C", dtype="uint8")
@@ -157,8 +157,8 @@ def conv_int8(Y_shape, X, X_zero_point, W, W_zero_point,
                 Y_zero_point,
                 C_multiplier,
                 column_offset,
-                    MB, IC, OC, IN_DIM, G, K, stride, pad,
-                    nthreads), name="C", dtype="uint8")
+                MB, IC, OC, IN_DIM, G, K, stride, pad, spatial_dim,
+                nthreads), name="C", dtype="uint8")
 
 
 _init_api("tvm.contrib.fbgemm")

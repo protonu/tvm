@@ -67,7 +67,7 @@ TVM_REGISTER_GLOBAL("tvm.contrib.fbgemm.print_col_offsets")
 TVM_REGISTER_GLOBAL("tvm.contrib.fbgemm.pack_matrixB_int8")
     .set_body([](TVMArgs args, TVMRetValue* ret) {
       bool trans = args[2];
-      matrix_op_t trans_params = matrix_op_t::Transpose;
+      matrix_op_t trans_params = matrix_op_t::NoTranspose;
       DLTensor* W = args[0];
       int threads = args[1];
 
@@ -75,10 +75,11 @@ TVM_REGISTER_GLOBAL("tvm.contrib.fbgemm.pack_matrixB_int8")
 
       int k = W->shape[0]; 
       int n = W->shape[1];
-      int ld = n;
+      int ld = W->shape[1];
       if (trans) {
-        trans_params = matrix_op_t::NoTranspose;
-	ld = k;
+        trans_params = matrix_op_t::Transpose;
+	k = W->shape[1];
+	n = W->shape[0];
       }
       BlockingFactors params;
       if (args.size() > 3) {
@@ -477,7 +478,8 @@ TVM_REGISTER_GLOBAL("tvm.contrib.fbgemm.gemmint8acc32packedwt_with_requant")
 
       DLTensor* B = args[2];  // N quantized int8 bias
       DLTensor* Y = args[3];
-      int threads = args[9];
+      int trans = args[9];
+      int threads = args[10];
 
       //CHECK_EQ(X->ndim, 2);
       //CHECK_EQ(W->ndim, 2);
@@ -493,10 +495,18 @@ TVM_REGISTER_GLOBAL("tvm.contrib.fbgemm.gemmint8acc32packedwt_with_requant")
       int m = X->shape[0];
       int n = Y->shape[1];
       int k = X->shape[1];
+      int ld = X->shape[1];
+
+      matrix_op_t trans_param = matrix_op_t::NoTranspose;
+      if (trans) {
+	m = X->shape[1];
+	k = X->shape[0];
+	trans_param = matrix_op_t::Transpose;
+      }
 
       BlockingFactors params;
 
-      if(args.size() > 10) {
+      if(args.size() > 11) {
         int cntr = 10;
         params.MCB = args[cntr];
         params.NCB = args[cntr + 1];
@@ -519,11 +529,11 @@ TVM_REGISTER_GLOBAL("tvm.contrib.fbgemm.gemmint8acc32packedwt_with_requant")
       std::vector<TensorQuantizationParams> temp_qparams;
       temp_qparams.push_back(TensorQuantizationParams{1.0, w_zero_point});
 
-      if(args.size() > 10){
+      if(args.size() > 11){
 
         PackAWithRowOffset<std::uint8_t> packA(
-            matrix_op_t::NoTranspose, m, k,
-            reinterpret_cast<const std::uint8_t*>(X->data), k, nullptr, 1,
+            trans_param, m, k,
+            reinterpret_cast<const std::uint8_t*>(X->data), ld, nullptr, 1,
             row_offsets_.data(), &params);
 
         DoNothing<> doNothingObj{};
@@ -539,8 +549,8 @@ TVM_REGISTER_GLOBAL("tvm.contrib.fbgemm.gemmint8acc32packedwt_with_requant")
       }  else {
 
         PackAWithRowOffset<std::uint8_t> packA(
-            matrix_op_t::NoTranspose, m, k,
-            reinterpret_cast<const std::uint8_t*>(X->data), k, nullptr, 1,
+            trans_param, m, k,
+            reinterpret_cast<const std::uint8_t*>(X->data), ld, nullptr, 1,
             row_offsets_.data());
 
         DoNothing<> doNothingObj{};

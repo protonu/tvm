@@ -162,15 +162,14 @@ def fbgemm_packed_weights(m, n, k):
            y.asnumpy(), np.matmul(x.asnumpy(), w.asnumpy()) + b.asnumpy(), rtol=1e-5)
 
 def test_fbgemm_packed_weights_with_requant(m, n, k, w_val, x_val, b_val):
-    W_trans = False
     ctx = tvm.cpu(0)
     W = tvm.placeholder((k, n), name='W', dtype="uint8")
     w = tvm.nd.array(np.random.uniform(w_val - 1, w_val + 2, size=(k, n)).astype(W.dtype), ctx)
     my_packedw = tvm.get_global_func("tvm.contrib.fbgemm.pack_matrixB_int8")
-    ww = my_packedw(w, 1, W_trans)
+    ww = my_packedw(w, 1)
 
     get_co_offsets = tvm.get_global_func("tvm.contrib.fbgemm.compute_col_offsets_int8")
-    co = get_co_offsets(w, 1, 1, W_trans)
+    co = get_co_offsets(w, 1, 1)
 
     X = tvm.placeholder((m, k), name='X', dtype="int8")
     B = tvm.placeholder((n,), name='B', dtype="int")
@@ -243,30 +242,28 @@ def test_fbgemm_packed_weights_with_requant_and_trans(m, n, k, w_val, x_val, b_v
            y.asnumpy(), np.matmul(x_un, w_un) + b.asnumpy(), rtol=1e-5)
 
 
-def test_fbgemm_conv_int8(MB, IC, OC, IN_DIM_lst, G, K_lst, stride_lst, pad_lst):
+def test_fbgemm_conv_int8(spatial_dim, MB, IC, OC, IN_DIM_lst, G, K_lst, stride_lst, pad_lst):
     ctx = tvm.cpu(0)
-    spatial_dim = 2
     IN_DIM = tvm.nd.array(np.array(IN_DIM_lst).astype("int32"), ctx)
     K = tvm.nd.array(np.array(K_lst).astype("int32"), ctx)
     stride = tvm.nd.array(np.array(stride_lst).astype("int32"), ctx)
     pad = tvm.nd.array(np.array(pad_lst).astype("int32"), ctx)
     
-    IN_DIMP = [0, 0]
-    OUT_DIM = [0, 0]
-    
-    IN_DIMP[0] = IN_DIM_lst[0] + pad_lst[0] + pad_lst[2];
-    OUT_DIM[0] = (IN_DIMP[0] - K_lst[0]) / stride_lst[0] + 1;
-    
-    IN_DIMP[1] = IN_DIM_lst[1] + pad_lst[1] + pad_lst[3];
-    OUT_DIM[1] = (IN_DIMP[1] - K_lst[1]) / stride_lst[1] + 1;
-    
+    IN_DIMP = [0 for i in range(spatial_dim)]
+    OUT_DIM = [0 for i in range(spatial_dim)]
+
+    for d in range(spatial_dim):
+      IN_DIMP[d] = IN_DIM_lst[d] + pad_lst[d] + pad_lst[spatial_dim + d];
+      OUT_DIM[d] = (IN_DIMP[d] - K_lst[d]) / stride_lst[d] + 1;
+    }
+
     # shapes
-    input_shape = (MB, IN_DIM_lst[0], IN_DIM_lst[1], IC) #NHWC
-    W_shape = (K_lst[0], K_lst[1], IC, OC / G) #RSCK
-    Y_shape = (MB, OUT_DIM[0], OUT_DIM[1], OC) #NHWK
+    input_shape = [MB] + IN_DIM_lst + [IC] #NHWC
+    W_shape = K_lst + [IC, OC / G] #RSCK
+    Y_shape = [MB] + OUT_DIM + [OC] #NHWK
     # weight
     W = tvm.placeholder(W_shape, name='W', dtype="int8")
-    wa_length = K_lst[0] * K_lst[1] * IC * OC / G
+    wa_length = np.prod(K_lst) * IC * OC / G
     wa = [random.randint(-4, 4) for i in range(wa_length)]
     w = tvm.nd.array(np.reshape(np.array(wa), W_shape).astype(W.dtype), ctx)
     
@@ -293,18 +290,18 @@ def test_fbgemm_conv_int8(MB, IC, OC, IN_DIM_lst, G, K_lst, stride_lst, pad_lst)
 
     C_multiplier = 0.0878014
     
-    in_dim_v = create_pointer_vector_int(IN_DIM, 2)
-    k_v = create_pointer_vector_int(K, 2)
-    stride_v = create_pointer_vector_int(stride, 2)
-    pad_v = create_pointer_vector_int(pad, 4)
+    in_dim_v = create_pointer_vector_int(IN_DIM, spatial_dim)
+    k_v = create_pointer_vector_int(K, spatial_dim)
+    stride_v = create_pointer_vector_int(stride, spatial_dim)
+    pad_v = create_pointer_vector_int(pad, spatial_dim * 2)
 
     C = fbgemm.conv_int8(Y_shape, X, X_zero_point, ww,
                          W_zero_point, Y_zero_point, C_multiplier, co,
-                         MB, IC, OC, in_dim_v, G, k_v, stride_v, pad_v)
+                         MB, IC, OC, in_dim_v, G, k_v, stride_v, pad_v, spatial_dim)
     s = tvm.create_schedule(C.op)
     f = tvm.build(s, [X, C], target="llvm", name="conv_int8")
 
-    x_length = MB * IN_DIM_lst[0] * IN_DIM_lst[1] * IC
+    x_length = MB * np.prod(IN_DIM_lst) * IC
     xa = [random.randint(0, 5) for i in range(x_length)]
     x = tvm.nd.array(np.reshape(np.array(xa), input_shape).astype(X.dtype), ctx)
     y = tvm.nd.array(np.zeros(Y_shape, dtype=C.dtype), ctx)
@@ -409,12 +406,14 @@ if __name__ == "__main__":
 	 for shape in shapes:
 		for value in values:
 			c = shape + value
-			print(c)
 			comb.append(c)
 
          for c in comb:
-	 	test_fbgemm_packed_weights_with_requant(c[0], c[1], c[2], c[3], c[4], c[5])         
-   
+ 	    test_fbgemm_packed_weights_with_requant_and_trans(c[0], c[1], c[2], c[3], c[4], c[5], True, True)
+            test_fbgemm_packed_weights_with_requant_and_trans(c[0], c[1], c[2], c[3], c[4], c[5], True, False)
+            test_fbgemm_packed_weights_with_requant_and_trans(c[0], c[1], c[2], c[3], c[4], c[5], False, True)
+            test_fbgemm_packed_weights_with_requant_and_trans(c[0], c[1], c[2], c[3], c[4], c[5], False, False) 
+
     else:
     
          for shape in shapes_others:
