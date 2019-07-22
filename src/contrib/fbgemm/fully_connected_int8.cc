@@ -55,6 +55,98 @@ TVM_REGISTER_GLOBAL("tvm.contrib.fbgemm.print_col_offsets")
       std::cout << "size of col offsets" << coffsts->size() << std::endl;
     });
 
+TVM_REGISTER_GLOBAL("tvm.contrib.fbgemm.packB_with_allocated_tensor")
+    .set_body([](TVMArgs args, TVMRetValue* ret) {
+      //This in the input weight matrix which needs to be packed		    
+      DLTensor* inputB = args[0];  
+      //This is the iraw memory for packed weights
+      DLTensor* packedBufferB = args[1];  
+      int num_rows = inputB->shape[0];
+      int num_cols = inputB->shape[1];
+      PackBMatrix<std::int8_t, std::int32_t> *packB;
+
+      //Assume input is not transposed
+      static BlockingFactors params;
+      if (args.size() > 2) {
+        int cntr = 2;
+        params.MCB = args[cntr];
+        params.NCB = args[cntr + 1];
+        params.KCB = args[cntr + 2];
+        params.MR = args[cntr + 3];
+        params.NR = args[cntr + 4];
+        params.NR_MIN = args[cntr + 5];
+        params.ROW_INTERLEAVE = args[cntr + 6];
+  
+        packB = new PackBMatrix<std::int8_t, std::int32_t>(
+            matrix_op_t::NoTranspose, num_rows, num_cols,
+            reinterpret_cast<const std::int8_t*>(inputB->data), num_cols, 
+	    reinterpret_cast<std::int8_t*>(packedBufferB->data), 1,
+            &params);
+        } else {
+        packB = new PackBMatrix<std::int8_t, std::int32_t>(
+            matrix_op_t::NoTranspose, num_rows, num_cols,
+            reinterpret_cast<const std::int8_t*>(inputB->data), num_cols, 
+	    reinterpret_cast<std::int8_t*>(packedBufferB->data), 1);
+      }
+
+    });
+
+TVM_REGISTER_GLOBAL("tvm.contrib.fbgemm.create_packed_matrix_with_buffer")
+    .set_body([](TVMArgs args, TVMRetValue* ret) {
+      //This in the input weight matrix which needs to be packed		    
+      DLTensor* inputB = args[0];  
+      int k = inputB->shape[0];
+      int n = inputB->shape[1];
+
+      auto packB = new PackBMatrix<std::int8_t, std::int32_t>(
+          matrix_op_t::NoTranspose, 
+	  256,
+	  32,
+	  256,
+	  32,
+	  1,
+	  1,
+	  32,
+          reinterpret_cast<std::int8_t*>(inputB->data)); 
+ 
+    });
+
+//This function does a gemm where the weights have been pre-packed
+//This implementation does not depend on opaque pointers
+TVM_REGISTER_GLOBAL("tvm.contrib.fbgemm.packedgemm_U8S8ACC32")
+    .set_body([](TVMArgs args, TVMRetValue* ret) {
+
+      DLTensor* A = args[0];  // M*K quantized uint8 input
+      DLTensor* PackedB = args[1];  // K*N quantized int8 input
+      DLTensor* C = args[2];  // M*N int32 output
+
+      int m = A->shape[0];
+      int n = PackedB->shape[1];
+      int k = A->shape[1];
+
+      auto packB = PackBMatrix<std::int8_t, std::int32_t>(
+                matrix_op_t::NoTranspose, 
+	        256,
+	        32,
+	        256,
+	        32,
+	        1,
+	        1,
+	        32,
+                reinterpret_cast<std::int8_t*>(PackedB->data)); 
+
+      PackAMatrix<std::uint8_t> packA(
+          matrix_op_t::NoTranspose, m, k,
+          reinterpret_cast<const std::uint8_t*>(A->data), k, nullptr, 1);
+
+      DoNothing<std::int32_t, std::int32_t> doNothing32BitObj;
+      memCopy<> memcopyObj (doNothing32BitObj);
+
+      fbgemmPacked(packA, packB, reinterpret_cast<std::int32_t*>(C->data),
+                  reinterpret_cast<std::int32_t*>(C->data), n, memcopyObj, 0, 1); 
+
+ });	
+
 TVM_REGISTER_GLOBAL("tvm.contrib.fbgemm.pack_matrixB_int8")
     .set_body([](TVMArgs args, TVMRetValue* ret) {
       DLTensor* W = args[0];  // N*K quantized int8 weight

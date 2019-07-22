@@ -29,6 +29,29 @@ def matmul_fp16(A, B, nthreads=1):
             "tvm.contrib.fbgemm.matmul_fp16",
             ins[0], ins[1], outs[0], nthreads), name="C")
 
+def packB_with_alloacted_tensor(num_rows, num_cols, X, nthreads=1,
+                         	autotune = False, MCB = 56, NCB = 32, KCB = 256, 
+                                MR = 14, NR = 32, NR_MIN = 16, ROW_INTERLEAVE = 4):
+    return _api.extern(
+        (num_rows, num_cols), [X],
+            lambda ins, outs: _intrin.call_packed(
+              	    "tvm.contrib.fbgemm.packB_with_allocated_tensor",
+                    ins[0], outs[0], 
+                    MCB, NCB, KCB, MR, NR, NR_MIN, ROW_INTERLEAVE), 
+                    name="PB", dtype="int8")           
+
+def packedgemm_U8S8ACC32(m,n, A, PackedB,  nthreads=1,
+                         	autotune = False, MCB = 56, NCB = 32, KCB = 256, 
+                                MR = 14, NR = 32, NR_MIN = 16, ROW_INTERLEAVE = 4):
+    return _api.extern(
+        (m, n), [A, PackedB],
+            lambda ins, outs: _intrin.call_packed(
+              	    "tvm.contrib.fbgemm.packedgemm_U8S8ACC32",
+                    ins[0], ins[1], outs[0], 
+                    MCB, NCB, KCB, MR, NR, NR_MIN, ROW_INTERLEAVE), 
+                    name="C", dtype="int")           
+
+
 
 def gemm_int8acc32_prepacked(m, n, X, X_qparams, packedW, W_qparams,
                                 B, Y_qparams, col_offsets, nthreads=1,

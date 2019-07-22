@@ -89,6 +89,9 @@ class TypeSolver::Unifier : public TypeFunctor<Type(const Type&, const Type&)> {
       return lhs->resolved_type;
     } else {
       Type resolved = this->VisitType(lhs->resolved_type, rhs->resolved_type);
+      if(resolved.defined() == false){
+	      return rhs->resolved_type;
+	}
       CHECK(resolved.defined())
         << "Unable to unify parent types: "
         << lhs->resolved_type << " and " << rhs->resolved_type;
