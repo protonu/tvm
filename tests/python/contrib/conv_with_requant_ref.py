@@ -2,7 +2,6 @@
 A reference solution of convolution with requantization used to check
 correctness of test_fbgemm_conv_int8(), which calls FBGEMM convolution
 operator from TVM. This is called directly from the TVM python interface.
-
 This is a python reimplementation of c++ reference solution from FBGEMM:
 https://github.com/pytorch/FBGEMM/blob/master/src/RefImplementations.cc
 """
@@ -110,9 +109,30 @@ def col_offsets_with_zero_pt_s8acc32_ref(K, N, ld, OC, Bint8, B_zero_point,
 
     return col_offsets
 
+def transposeConvWeights(IC, OC, G, K, src):
+    IC_per_G = IC / G
+    OC_per_G = OC / G
+
+    R = K[0]
+    S = K[1]
+
+    dest = [0 for i in range(len(src))]
+    
+    #Transforms weights from  G K/G (R S C/G) to G (R S C/G) K/G format.
+    for r in range(R):
+      for s in range(S):
+        for k in range(OC_per_G):
+          for g in range(G):
+            for c in range(IC_per_G):
+              dest[(((g * R + r) * S + s) * IC_per_G + c) * OC_per_G + k] = \
+                  src[(((g * OC_per_G + k) * R + r) * S + s) * IC_per_G + c]
+    return dest
+
 
 def reference_solution(A, A_zero_point, W, MB, IC, OC, IN_DIM, OUT_DIM, G, K,
                        stride, pad, C_multiplier, B_zero_point, C_zero_point):
+
+    W = transposeConvWeights(IC, OC, G, K, W)
     Cint32_ref = conv_ref(MB, IC, OC, IN_DIM, OUT_DIM, G, K, stride, pad,
                  A, A_zero_point, W)
 
