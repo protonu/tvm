@@ -3,7 +3,7 @@ import numpy as np
 from tvm.contrib import fbgemm
 from collections import namedtuple
 
-#raw_input("dummy breakpoint")
+raw_input("dummy breakpoint")
 
 QuantParams = namedtuple("QuantParams", "scale zero_point") 
 def test_fc_int8():
@@ -111,6 +111,34 @@ def test_fbgemm_packed_weights(m, n, k):
     tvm.testing.assert_allclose(
            y.asnumpy(), np.matmul(x.asnumpy(), w.asnumpy()) + b.asnumpy(), rtol=1e-5)
 
+def packB_and_gemm(m=56,n=32, k=256):
+    ctx = tvm.cpu(0)
+
+    B = tvm.placeholder((k, n), name='B', dtype="int8")
+
+    PB = fbgemm.packB_with_alloacted_tensor(k, n, B)
+    s = tvm.create_schedule(PB.op)
+    print(tvm.lower(s, [B, PB], simple_mode=True))
+    f = tvm.build(s, [B,PB], target="llvm", name="packb")
+    Buf = tvm.nd.array(np.zeros((k, n), dtype=PB.dtype), ctx)
+    b = tvm.nd.array(np.random.uniform(1, 1, size=(k, n)).astype(B.dtype), ctx)
+    f(b, Buf) 
+    print(Buf)
+
+    A = tvm.placeholder((m, k), name='A', dtype="uint8")
+    pB = tvm.placeholder((k,n), name="pB", dtype=PB.dtype)
+
+    C = fbgemm.packedgemm_U8S8ACC32(m, n, A, pB)
+    ss = tvm.create_schedule(C.op)
+    f_gemm = tvm.build(ss, [A,pB, C], target="llvm", name="packed_gemm")
+    print(tvm.lower(ss, [A, pB, C], simple_mode=True))
+
+    c = tvm.nd.array(np.zeros((m, n), dtype=C.dtype), ctx)
+    a = tvm.nd.array(np.random.uniform(1, 1, size=(m, k)).astype(A.dtype), ctx)
+    f_gemm(a, Buf, c)
+    print(c)
+
+
 if __name__ == "__main__":
     #test_matmul_fp16()
     #test_fc_int8()
@@ -124,6 +152,6 @@ if __name__ == "__main__":
 
     #for shape in shapes:
     #    test_fbgemm_packed_weights(shape[0], shape[1], shape[2])
-
-    test_fbgemm_packed_weights(1024, 1024, 1024)
+    #test_fbgemm_packed_weights(1024, 1024, 1024)
+    packB_and_gemm()
 

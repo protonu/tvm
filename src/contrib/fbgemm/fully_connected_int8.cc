@@ -91,6 +91,7 @@ TVM_REGISTER_GLOBAL("tvm.contrib.fbgemm.packB_with_allocated_tensor")
       }
 
     });
+
 /*
 TVM_REGISTER_GLOBAL("tvm.contrib.fbgemm.create_packed_matrix_with_buffer")
     .set_body([](TVMArgs args, TVMRetValue* ret) {
@@ -147,7 +148,9 @@ TVM_REGISTER_GLOBAL("tvm.contrib.fbgemm.packedgemm_U8S8ACC32")
                   reinterpret_cast<std::int32_t*>(C->data), n, memcopyObj, 0, 1); 
 
  });	
+
 */
+
 TVM_REGISTER_GLOBAL("tvm.contrib.fbgemm.pack_matrixB_int8")
     .set_body([](TVMArgs args, TVMRetValue* ret) {
       DLTensor* W = args[0];  // N*K quantized int8 weight
